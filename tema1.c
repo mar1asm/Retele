@@ -16,8 +16,8 @@
 #define BLUE  "\x1B[34m"
 
 int login ( char* username );
-int myFind ( char* filename);
-int myStat ( char* filename, char* path);
+int myStat ( char* filename);
+int myFind ( char* filename, char* path, char* filesInfo);
 
 int main () {
     int fd, isRunning = 1;
@@ -48,7 +48,7 @@ int main () {
         if ( pid == 0 ) {
             int length;
             char command[100];
-            char answer[100];
+            char answer[500];
             close ( pipe1[1] );
             read ( pipe1[0], &length, 4 );
             read ( pipe1[0], command, length );
@@ -71,15 +71,15 @@ int main () {
                 close ( fd );
                 exit ( 0 ); 
             }
-            if ( ! strcmp ( p, "myfind" ) ) { 
+            if ( ! strcmp ( p, "mystat" ) ) { 
                 p = strtok ( NULL, " " ); 
                 printf("exiting myfind");
                 exit ( 0 );
             }
-            if ( ! strcmp ( p, "mystat" ) ) {
+            if ( ! strcmp ( p, "myfind" ) ) {
                 p = strtok ( NULL, " " );
                 p[ strlen ( p ) -1 ] = '\0';
-                myStat( p, "/home/maria/retele" );
+                myFind( p, "/home/maria/retele", answer );
                 exit ( 0 );
             }
             printf("unknown command"); 
@@ -120,29 +120,28 @@ int login ( char* username ) {
     return 0;
 }
 
-int myFind ( char* filename) {
+int myStat ( char* filename) {
     printf("hello from myFind");
 }
 
 
-int myStat ( char* filename, char* path) {
+int myFind ( char* filename, char* path, char* filesInfo) {
 
     DIR *d = opendir( path );
     if( d == NULL ) return 1;
     struct dirent *dir;
     while ( ( dir = readdir ( d ) ) != NULL ) {
         if(dir-> d_type != DT_DIR) {
-            printf("%s\n", dir->d_name);
             //verifica daca are numele potrivit
             if ( ! strcmp ( dir -> d_name, filename ) ) {
-                printf("%s\n", dir -> d_name);
+                printf("%s\n", "found it");
             }
         } else if ( dir -> d_type == DT_DIR && strcmp(dir->d_name,"." ) != 0 && strcmp ( dir->d_name,".." ) != 0 ) {
             char new_path[255];
             strcat ( new_path, path );
             strcat ( new_path, "/" );
             strcat ( new_path, dir -> d_name);
-            myStat ( filename, new_path );
+            myFind ( filename, new_path, filesInfo );
         }
     }
     closedir ( d );
