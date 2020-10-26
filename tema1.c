@@ -31,14 +31,14 @@ int main ( ) {
     pipe ( pipe1 );
 
     struct stat stats;
-    if ( stat ( "./fifo", &stats ) >= 0 ) { // MyFifo exista
-      if ( unlink ( "./fifo" ) < 0 )        // il sterg
+    if ( stat ( "./myFifo", &stats ) >= 0 ) { // MyFifo exista
+      if ( unlink ( "./myFifo" ) < 0 )        // il sterg
       {
         perror ( "unlink failed" );
         return -1;
       }
     }
-    if ( mkfifo ( "./fifo", S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH ) == -1 )
+    if ( mkfifo ( "./myFifo", 0666 ) == -1 )
       printf ( "Eroare la FIFO\n" );
 
     pid = fork ( );
@@ -64,7 +64,7 @@ int main ( ) {
         login ( p ) ? strcpy ( answer, "login_success" )
                     : strcpy ( answer, "login_fail" );
         int answerLength = strlen ( answer );
-        fd = open ( "./fifo", O_WRONLY );
+        fd = open ( "./myFifo", O_WRONLY );
         write ( fd, &answerLength, 4 );
         write ( fd, answer, answerLength );
         close ( fd );
@@ -80,7 +80,6 @@ int main ( ) {
         p[ strlen ( p ) - 1 ] = '\0';
         strcpy ( answer, "\0" );
         myFind ( p, "/home/maria/retele", answer );
-        printf ( "ok" );
         printf ( "%s", answer );
         exit ( 0 );
       }
@@ -94,13 +93,15 @@ int main ( ) {
     write ( pipe1[ 1 ], command, strlen ( command ) );
     close ( pipe1[ 1 ] );
 
-    char *answer = NULL;
+    char answer[ 100 ];
 
     char *p = strtok ( command, " " );
     if ( ! strcmp ( p, "login:" ) ) {
-      fd = open ( "./fifo", O_RDONLY );
-      read ( fd, &length, 4 );
-      read ( fd, answer, length );
+      int fd2;
+      fd2 = open ( "./myFifo", O_RDONLY );
+      read ( fd2, &length, 4 );
+      read ( fd2, answer, length );
+
       ! strcmp ( answer, "login_success" )
           ? printf ( "%s\n", "You have successfully logged in" )
           : printf ( "%s\n", "Login failed" );
@@ -111,7 +112,7 @@ int main ( ) {
 int login ( char *username ) {
   FILE *file;
   file = fopen ( "users.txt", "r" );
-  char *usernames;
+  char usernames[ 20 ];
   username[ strlen ( username ) - 1 ] = '\0';
   while ( fscanf ( file, "%s\n", usernames ) != EOF ) {
     if ( ! strcmp ( username, usernames ) ) {
@@ -124,7 +125,7 @@ int login ( char *username ) {
 int myStat ( char *filename ) { printf ( "hello from myFind" ); }
 
 int myFind ( char *filename, char *path, char *filesInfo ) {
-
+  printf ( "%s", filesInfo );
   DIR *d = opendir ( path );
   if ( d == NULL )
     return 1;
@@ -149,8 +150,7 @@ int myFind ( char *filename, char *path, char *filesInfo ) {
         strcat ( filesInfo, convertedTime );
 
         // tm=localtime(&st.st_ctim)
-
-        strcat ( filesInfo, ( char * ) st.st_size );
+        // int size = st.st_size;
       }
     } else if ( dir->d_type == DT_DIR && strcmp ( dir->d_name, "." ) != 0 &&
                 strcmp ( dir->d_name, ".." ) != 0 ) {
@@ -161,6 +161,5 @@ int myFind ( char *filename, char *path, char *filesInfo ) {
       myFind ( filename, new_path, filesInfo );
     }
   }
-  printf ( "nu e ok" );
   closedir ( d );
 }
