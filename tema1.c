@@ -11,9 +11,13 @@
 #include <time.h>
 #include <unistd.h>
 
+// base functions
 int login ( char *username );
 int myStat ( char *filename );
 int myFind ( char *filename, char *path, char *filesInfo );
+
+// aux functions
+void getPermissions ( mode_t permissions, char *perm );
 
 int main ( ) {
 
@@ -76,11 +80,19 @@ int main ( ) {
         exit ( 0 );
       }
       if ( ! strcmp ( p, "myfind" ) ) {
+        close ( sockp[ 0 ] );
         p = strtok ( NULL, " " );
-        p[ strlen ( p ) - 1 ] = '\0';
-        strcpy ( answer, "\0" );
+        p[ strlen ( p ) - 2 ] = '\0';
+        strcpy ( answer, "" );
         myFind ( p, "/home/maria/retele", answer );
-        printf ( "%s", answer );
+        length = strlen ( answer );
+        answer[ length - 1 ] = '\0';
+        write ( sockp[ 1 ], &length, 4 );
+
+        if ( length ) {
+          write ( sockp[ 1 ], answer, length );
+        }
+        close ( sockp[ 1 ] );
         exit ( 0 );
       }
       printf ( "unknown command" );
@@ -93,10 +105,9 @@ int main ( ) {
     write ( pipe1[ 1 ], command, strlen ( command ) );
     close ( pipe1[ 1 ] );
 
-    char answer[ 100 ];
-
     char *p = strtok ( command, " " );
     if ( ! strcmp ( p, "login:" ) ) {
+      char answer[ 100 ];
       int fd2;
       fd2 = open ( "./myFifo", O_RDONLY );
       read ( fd2, &length, 4 );
@@ -106,6 +117,21 @@ int main ( ) {
           ? printf ( "%s\n", "You have successfully logged in" )
           : printf ( "%s\n", "Login failed" );
     };
+
+    if ( ! strcmp ( p, "myfind" ) ) {
+      char answer[ 100 ];
+      close ( sockp[ 1 ] );
+      read ( sockp[ 0 ], &length, 4 );
+      if ( length == 0 )
+        printf (
+            "No file with this name found. Try searching for smth else\n" );
+      else {
+        read ( sockp[ 0 ], answer, length );
+        printf ( "%s\n", answer );
+      }
+
+      close ( sockp[ 0 ] );
+    }
   }
 }
 
@@ -125,7 +151,6 @@ int login ( char *username ) {
 int myStat ( char *filename ) { printf ( "hello from myFind" ); }
 
 int myFind ( char *filename, char *path, char *filesInfo ) {
-  printf ( "%s", filesInfo );
   DIR *d = opendir ( path );
   if ( d == NULL )
     return 1;
@@ -139,27 +164,46 @@ int myFind ( char *filename, char *path, char *filesInfo ) {
         strcat ( filePath, filename );
         struct stat st;
         stat ( filePath, &st );
+        strcat ( filesInfo, path );
+        strcat ( filesInfo, " " );
 
         struct tm *tm;
         char convertedTime[ 200 ];
+
         tm = localtime ( &st.st_ctime );
         strftime ( convertedTime, sizeof ( convertedTime ), "%d.%m.%Y-%H:%M:%S",
                    tm );
-        strcat ( filesInfo, path );
-        strcat ( filesInfo, " " );
         strcat ( filesInfo, convertedTime );
-
-        // tm=localtime(&st.st_ctim)
-        // int size = st.st_size;
+        mode_t permissions = st.st_mode;
+        strcat ( filesInfo, " " );
+        char perm[ 10 ];
+        getPermissions ( permissions, perm );
+        strcat ( filesInfo, perm );
+        strcat ( filesInfo, "\n" );
       }
     } else if ( dir->d_type == DT_DIR && strcmp ( dir->d_name, "." ) != 0 &&
-                strcmp ( dir->d_name, ".." ) != 0 ) {
+                strcmp ( dir->d_name, ".." ) != 0 ) { // sa nu ma intorc
       char new_path[ 255 ];
-      strcat ( new_path, path );
+      strcpy ( new_path, path ); // lol
       strcat ( new_path, "/" );
       strcat ( new_path, dir->d_name );
       myFind ( filename, new_path, filesInfo );
     }
   }
   closedir ( d );
+}
+
+// aux functions
+
+void getPermissions ( mode_t permissions, char *perm ) {
+  perm[ 0 ] = ( permissions & S_IRUSR ) ? 'r' : '-';
+  perm[ 1 ] = ( permissions & S_IWUSR ) ? 'w' : '-';
+  perm[ 2 ] = ( permissions & S_IXUSR ) ? 'x' : '-';
+  perm[ 3 ] = ( permissions & S_IRGRP ) ? 'r' : '-';
+  perm[ 4 ] = ( permissions & S_IWGRP ) ? 'w' : '-';
+  perm[ 5 ] = ( permissions & S_IXGRP ) ? 'x' : '-';
+  perm[ 6 ] = ( permissions & S_IROTH ) ? 'r' : '-';
+  perm[ 7 ] = ( permissions & S_IWOTH ) ? 'w' : '-';
+  perm[ 8 ] = ( permissions & S_IXOTH ) ? 'x' : '-';
+  perm[ 9 ] = '\0';
 }
