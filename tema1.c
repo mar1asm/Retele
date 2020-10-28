@@ -26,7 +26,7 @@ void getFileType ( int type, char *fileType );
 
 int main ( ) {
 
-  int fd, isRunning = 1;
+  int fd, isRunning = 1, loggedIn = 0;
   char *command;
   pid_t pid;
   int length;
@@ -85,8 +85,13 @@ int main ( ) {
           strcpy ( password, p );
         }
         close ( sockp[ 0 ] );
-        login ( username ) ? strcpy ( answer, "login_success" )
-                           : strcpy ( answer, "login_fail" );
+        if ( login ( username ) ) {
+          loggedIn = 1;
+          strcpy ( answer, "login_success" );
+        } else {
+          loggedIn = 0;
+          strcpy ( answer, "login_fail" );
+        };
         int answerLength = strlen ( answer );
         fd = open ( "./myFifo", O_WRONLY );
         write ( fd, &answerLength, 4 );
@@ -98,6 +103,12 @@ int main ( ) {
         char answer[ 500 ], filename[ 100 ], path[ 100 ], flags[ 3 ],
             command[ 20 ];
         close ( sockp[ 0 ] );
+        if ( ! loggedIn ) {
+          strcpy ( answer, "You need to log in first" );
+          length = strlen ( answer );
+          write ( sockp[ 1 ], &length, 4 );
+          write ( sockp[ 1 ], answer, length );
+        }
         strcpy ( command, p );
         p = strtok ( NULL, " " );
 
@@ -114,10 +125,14 @@ int main ( ) {
         }
 
         answer[ 0 ] = 0;
+        int ret = 0;
         if ( ! strcmp ( command, "mystat" ) )
-          myStat ( filename, path, answer );
+          ret = myStat ( filename, path, answer );
         else
-          myFind ( filename, path, answer );
+          ret = myFind ( filename, path, answer );
+
+        if ( ret == 1 )
+          strcpy ( answer, "Invalid path" );
 
         length = strlen ( answer );
         write ( sockp[ 1 ], &length, 4 );
@@ -168,7 +183,47 @@ int main ( ) {
       else {
         read ( sockp[ 0 ], answer, length );
         answer[ length ] = 0;
-        printf ( "%s\n", answer );
+        if ( ! strcmp ( answer, "Invalid path" ) ||
+             ! strcmp ( answer, "You need to log in first" ) )
+          printf ( "%s\n", answer );
+        else {
+          char *ch;
+          int filesFound = 0;
+          ch = strchr ( answer, '\n' );
+          while ( ch ) {
+            filesFound++;
+            ch = strchr ( ch + 1, '\n' );
+          }
+          printf ( "%d file(s) found\n", filesFound );
+          char *info;
+          info = strtok ( answer, " " );
+
+          for ( int i = 0; i < filesFound; i++ ) {
+            printf ( "File no. %d\n", i + 1 );
+
+            printf ( "Absolute path: %s\n", info );
+            info = strtok ( NULL, " " );
+            printf ( "Rights: %s\n", info );
+            info = strtok ( NULL, " " );
+            printf ( "Last change: %s\n", info );
+            info = strtok ( NULL, " " );
+            printf ( "Last access: %s\n", info );
+            info = strtok ( NULL, " " );
+            printf ( "Last modification: %s\n", info );
+            info = strtok ( NULL, " " );
+            printf ( "File type: %s\n", info );
+            info = strtok ( NULL, " " );
+            printf ( "Device ID: %s\n", info );
+            info = strtok ( NULL, " " );
+            printf ( "No. of hard links: %s\n", info );
+            info = strtok ( NULL, " " );
+            printf ( "UID: %s\n", info );
+            info = strtok ( NULL, " " );
+            printf ( "GID: %s\n\n", info );
+
+            info = strtok ( NULL, " \n" );
+          }
+        }
       }
       close ( sockp[ 0 ] );
       exit ( 0 );
@@ -184,15 +239,34 @@ int main ( ) {
       else {
         read ( sockp[ 0 ], answer, length );
         answer[ length ] = 0;
-        char *ch;
-        int filesFound = 0;
-        ch = strchr ( answer, '\n' );
-        while ( ch ) {
-          filesFound++;
-          ch = strchr ( ch + 1, '\n' );
+        if ( ! strcmp ( answer, "Invalid path" ) ||
+             ! strcmp ( answer, "You need to log in first" ) )
+          printf ( "%s\n", answer );
+        else {
+          read ( sockp[ 0 ], answer, length );
+          answer[ length ] = 0;
+          char *ch;
+          int filesFound = 0;
+          ch = strchr ( answer, '\n' );
+          while ( ch ) {
+            filesFound++;
+            ch = strchr ( ch + 1, '\n' );
+          }
+          printf ( "%d files found\n", filesFound );
+          char *info;
+          info = strtok ( answer, " " );
+
+          for ( int i = 0; i < filesFound; i++ ) {
+            printf ( "File no. %d\n", i + 1 );
+            printf ( "Absolute path: %s\n", info );
+            info = strtok ( NULL, " " );
+            printf ( "Rights: %s\n", info );
+            info = strtok ( NULL, " " );
+            printf ( "Last change: %s\n\n", info );
+
+            info = strtok ( NULL, " \n" );
+          }
         }
-        printf ( "found %d files\n", filesFound );
-        printf ( "%s\n", answer );
       }
       close ( sockp[ 0 ] );
       exit ( 0 );
@@ -251,8 +325,9 @@ int myFind ( char *filename, char *path, char *filesInfo ) {
     path[ 1 ] = 0;
   }
   DIR *d = opendir ( path );
-  if ( d == NULL )
+  if ( d == NULL ) {
     return 1;
+  }
   struct dirent *dir;
   while ( ( dir = readdir ( d ) ) != NULL ) {
     if ( dir->d_type != DT_DIR ) {
@@ -289,19 +364,22 @@ void getFilesInfo ( char *fnct, char *dirPath, char *filename,
   strcat ( fileInfo, absolute_path );
   strcat ( fileInfo, " " );
 
-  char date[ 200 ];
-  getDate ( st.st_ctime, date );
-  strcat ( fileInfo, date );
   mode_t permissions = st.st_mode;
-
   char perm[ 10 ];
   getPermissions ( permissions, perm );
   strcat ( fileInfo, perm );
+
+  strcat ( fileInfo, " " );
+
+  char date[ 200 ];
+  getDate ( st.st_ctime, date );
+  strcat ( fileInfo, date );
 
   if ( ! strcmp ( fnct, "find" ) ) {
     strcat ( fileInfo, "\n" );
     return;
   }
+  strcat ( fileInfo, " " );
   getDate ( st.st_atime, date );
   strcat ( fileInfo, date );
   getDate ( st.st_mtime, date );
@@ -310,6 +388,24 @@ void getFilesInfo ( char *fnct, char *dirPath, char *filename,
   char othrInfo[ 100 ];
   getFileType ( st.st_mode, othrInfo );
   strcat ( fileInfo, othrInfo );
+  strcat ( fileInfo, " " );
+
+  sprintf ( othrInfo, "%ld", st.st_dev );
+  strcat ( fileInfo, othrInfo );
+
+  strcat ( fileInfo, " " );
+
+  sprintf ( othrInfo, "%ld", st.st_nlink );
+  strcat ( fileInfo, othrInfo );
+  strcat ( fileInfo, " " );
+
+  sprintf ( othrInfo, "%d", st.st_uid );
+  strcat ( fileInfo, othrInfo );
+  strcat ( fileInfo, " " );
+
+  sprintf ( othrInfo, "%d", st.st_gid );
+  strcat ( fileInfo, othrInfo );
+
   strcat ( fileInfo, "\n" );
 }
 
