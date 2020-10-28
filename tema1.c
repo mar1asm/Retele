@@ -68,7 +68,7 @@ int main ( ) {
       command[ length ] = 0;
       if ( ! strcmp ( command, "quit" ) ) {
         // ceva....
-        printf ( "exiting quit" );
+        // printf ( "exiting quit" );
         exit ( 0 );
       }
       char *p;
@@ -128,7 +128,12 @@ int main ( ) {
 
         exit ( 0 );
       }
-      printf ( "unknown command\n" );
+      char answer[ 20 ];
+      close ( sockp[ 0 ] );
+      strcpy ( answer, "Unknown command" );
+      length = strlen ( answer );
+      write ( sockp[ 1 ], &length, 4 );
+      write ( sockp[ 1 ], answer, length );
       exit ( 0 );
     }
 
@@ -149,6 +154,8 @@ int main ( ) {
       ! strcmp ( answer, "login_success" )
           ? printf ( "%s\n", "You have successfully logged in" )
           : printf ( "%s\n", "Login failed" );
+      close ( fd2 );
+      exit ( 0 );
     }
 
     if ( ! strcmp ( p, "mystat" ) ) {
@@ -163,8 +170,8 @@ int main ( ) {
         answer[ length ] = 0;
         printf ( "%s\n", answer );
       }
-
       close ( sockp[ 0 ] );
+      exit ( 0 );
     }
 
     if ( ! strcmp ( p, "myfind" ) ) {
@@ -177,11 +184,26 @@ int main ( ) {
       else {
         read ( sockp[ 0 ], answer, length );
         answer[ length ] = 0;
+        char *ch;
+        int filesFound = 0;
+        ch = strchr ( answer, '\n' );
+        while ( ch ) {
+          filesFound++;
+          ch = strchr ( ch + 1, '\n' );
+        }
+        printf ( "found %d files\n", filesFound );
         printf ( "%s\n", answer );
       }
-
       close ( sockp[ 0 ] );
+      exit ( 0 );
     }
+
+    char answer[ 20 ];
+    close ( sockp[ 1 ] );
+    read ( sockp[ 0 ], &length, 4 );
+    read ( sockp[ 0 ], answer, length );
+    printf ( "%s\n", answer );
+    close ( sockp[ 0 ] );
   }
 }
 
@@ -271,15 +293,24 @@ void getFilesInfo ( char *fnct, char *dirPath, char *filename,
   getDate ( st.st_ctime, date );
   strcat ( fileInfo, date );
   mode_t permissions = st.st_mode;
-  strcat ( fileInfo, " " );
 
   char perm[ 10 ];
   getPermissions ( permissions, perm );
   strcat ( fileInfo, perm );
-  strcat ( fileInfo, "\n" );
 
-  if ( ! strcmp ( fnct, "find" ) )
+  if ( ! strcmp ( fnct, "find" ) ) {
+    strcat ( fileInfo, "\n" );
     return;
+  }
+  getDate ( st.st_atime, date );
+  strcat ( fileInfo, date );
+  getDate ( st.st_mtime, date );
+  strcat ( fileInfo, date );
+
+  char othrInfo[ 100 ];
+  getFileType ( st.st_mode, othrInfo );
+  strcat ( fileInfo, othrInfo );
+  strcat ( fileInfo, "\n" );
 }
 
 void getDate ( time_t time, char *date ) {
@@ -288,6 +319,7 @@ void getDate ( time_t time, char *date ) {
   tm = localtime ( &time );
   strftime ( convertedTime, sizeof ( convertedTime ), "%d.%m.%Y-%H:%M:%S", tm );
   strcpy ( date, convertedTime );
+  strcat ( date, " " );
 }
 
 void getPermissions ( mode_t permissions, char *perm ) {
@@ -304,36 +336,33 @@ void getPermissions ( mode_t permissions, char *perm ) {
 }
 
 void getFileType ( int type, char *fileType ) {
-  if ( type == DT_REG ) {
-    strcpy ( fileType, "regular" );
-    return;
-  }
-  if ( type == DT_DIR ) {
-    strcpy ( fileType, "directory" ); // just in case..
-    return;
-  }
-  if ( type == DT_FIFO ) {
-    strcpy ( fileType, "fifo" );
-    return;
-  }
-  if ( type == DT_SOCK ) {
-    strcpy ( fileType, "socket" );
-    return;
-  }
-  if ( type == DT_CHR ) {
-    strcpy ( fileType, "char" );
-    return;
-  }
-  if ( type == DT_BLK ) {
+
+  switch ( type & S_IFMT ) // type of file
+  {
+
+  case S_IFBLK:
     strcpy ( fileType, "block" );
-    return;
-  }
-  if ( type == DT_LNK ) {
+    break;
+  case S_IFCHR:
+    strcpy ( fileType, "char" );
+    break;
+  case S_IFDIR:
+    strcpy ( fileType, "directory" );
+    break;
+  case S_IFIFO:
+    strcpy ( fileType, "fifo" );
+    break;
+  case S_IFLNK:
     strcpy ( fileType, "link" );
-    return;
-  }
-  if ( type == DT_UNKNOWN ) {
+    break;
+  case S_IFREG:
+    strcpy ( fileType, "regular" );
+    break;
+  case S_IFSOCK:
+    strcpy ( fileType, "socket" );
+    break;
+  default:
     strcpy ( fileType, "unknown" );
-    return;
+    break;
   }
 }
