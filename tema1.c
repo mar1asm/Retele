@@ -17,6 +17,8 @@
 #define BLUE "\x1B[34m"
 #define NORMAL "\x1B[0m"
 
+pid_t pid;
+
 // base functions
 int login ( char *username, char *password );
 int myStat ( char *filename, char *path, char *fileInfo );
@@ -31,11 +33,16 @@ void getDate ( time_t time, char *date );
 void getFileType ( int type, char *fileType );
 void printFilesInfo ( char *command, char *answer );
 
+void killChild ( int sig ) {
+  printf ( RED "timeout-not responding" NORMAL );
+  kill ( pid, sig );
+}
+
 int main ( ) {
 
-  int fd, isRunning = 1, loggedIn = 0;
+  int fd, isRunning = 1, loggedIn = 1;
   char *command;
-  pid_t pid, ppid = getpid ( );
+  pid_t ppid = getpid ( );
   int length;
   while ( isRunning ) {
     size_t l = 0;
@@ -64,11 +71,11 @@ int main ( ) {
       printf ( RED "Eroare la FIFO\n" NORMAL );
       exit ( 0 );
     }
-
+    signal ( SIGALRM, ( void ( * ) ( int ) ) killChild );
     pid = fork ( );
 
     if ( pid == 0 ) {
-      setpgid ( 0, 0 );
+      // setpgid ( 0, 0 );
       int length;
       char command[ 100 ];
       close ( pipe1[ 1 ] );
@@ -116,8 +123,12 @@ int main ( ) {
         close ( fd );
       } else if ( ! strcmp ( p, "mystat" ) ||
                   ! strcmp ( p, "myfind" ) ) { // mystat or myfind
-        char answer[ 500 ], filename[ 100 ], path[ 100 ], depth[ 3 ],
+        char answer[ 2000 ], filename[ 100 ], path[ 100 ], depth[ 3 ],
             command[ 20 ];
+
+        filename[ 0 ] = 0;
+        path[ 0 ] = 0;
+        depth[ 0 ] = 0;
         close ( sockp[ 0 ] );
         if ( ! loggedIn ) {
           strcpy ( answer, "You need to log in first" );
@@ -134,11 +145,14 @@ int main ( ) {
           }
           while ( p ) {
             int pathOrDepth = 1;
+
             if ( p[ 0 ] == '-' ) {
               for ( int i = 1; i < strlen ( p ); i++ ) {
                 if ( ! ( p[ i ] >= '0' && p[ i ] <= '9' ) )
                   pathOrDepth = 0;
               }
+            } else {
+              pathOrDepth = 0;
             }
             if ( pathOrDepth )
               strcpy ( depth, p );
@@ -187,6 +201,7 @@ int main ( ) {
     close ( pipe1[ 1 ] );
 
     char *p = strtok ( command, " " );
+    alarm ( 10 );
 
     if ( ! strcmp ( p, "login:" ) ) {
       char answer[ 100 ];
@@ -195,6 +210,7 @@ int main ( ) {
       read ( fd2, &length, 4 );
       read ( fd2, answer, length );
       answer[ length ] = 0;
+      alarm ( 0 );
 
       if ( ! strcmp ( answer, "login_success" ) ) {
         printf ( GREEN "%s\n", "You have successfully logged in" NORMAL );
@@ -208,6 +224,7 @@ int main ( ) {
       char answer[ 100 ];
       close ( sockp[ 1 ] );
       read ( sockp[ 0 ], &length, 4 );
+      alarm ( 0 );
       if ( length == 0 )
         printf ( RED "No file with this name found. Try searching for smth "
                      "else\n" NORMAL );
@@ -223,9 +240,10 @@ int main ( ) {
       }
       close ( sockp[ 0 ] );
     } else if ( ! strcmp ( p, "myfind" ) ) {
-      char answer[ 500 ];
+      char answer[ 2000 ];
       close ( sockp[ 1 ] );
       read ( sockp[ 0 ], &length, 4 );
+      alarm ( 0 );
       if ( length == 0 )
         printf ( RED "No file with this name found. Try searching for smth "
                      "else\n" NORMAL );
@@ -246,6 +264,7 @@ int main ( ) {
       read ( sockp[ 0 ], &length, 4 );
       read ( sockp[ 0 ], answer, length );
       answer[ length ] = 0;
+      alarm ( 0 );
       if ( ! strcmp ( p, "info" ) )
         printf ( "%s\n", answer );
       else
@@ -258,8 +277,8 @@ int main ( ) {
 void quit ( pid_t parrentPid ) {
   printf ( "%d\n%d\n", parrentPid, getpid ( ) );
   kill ( -parrentPid, SIGTERM );
-  sleep ( 2 );
-  kill ( -parrentPid, SIGKILL );
+  // sleep ( 2 );
+  // kill ( -parrentPid, SIGKILL );
 }
 
 int login ( char *username, char *password ) {
@@ -324,6 +343,7 @@ int myStat ( char *filename, char *path, char *fileInfo ) {
 }
 
 int myFind ( char *filename, char *path, int depth, char *filesInfo ) {
+
   int r_left = 0, r_right = 0;
   if ( ! strlen ( path ) ) {
     path[ 0 ] = '.';
@@ -547,7 +567,7 @@ void info ( char *command, char *answer ) {
         "\nFoloseste comanda \"mystat\" urmata de numele fisierului despre "
         "care doresti sa afli informatii si path-ul directorului in care este "
         "fisierul, separate prin spatii. "
-        "ex \"mystat: filename.ext maria/retele/tema1\". \nIn cazul in "
+        "ex \"mystat: filename.ext /home/maria/retele/tema1\". \nIn cazul in "
         "care path-ul nu a fost specificat, se vor afisa informatii "
         "despre fisierele aflate in directorul curent. \nSe poate folosi de "
         "asemenea si '*' pentru a cauta toate fisierele cu o anumita extensie, "
@@ -563,7 +583,8 @@ void info ( char *command, char *answer ) {
         "care doresti sa afli informatii, path-ul directorului din care sa "
         "se inceapa cautarea si adancimea maxima la care sa se caute "
         "(precedata de simbolul \'-\'), separate "
-        "prin spatii. ex \"myfind: filename.ext maria/retele/tema1 -3\". \nIn "
+        "prin spatii. ex \"myfind: filename.ext /home/maria/retele/tema1 -3\". "
+        "\nIn "
         "cazul in care path-ul nu a fost specificat, se vor cauta fisierele "
         "pornind din directorul curent. In cazul in care adancimea la care sa "
         "se caute nu e specificata, cautarea se va face in toate "
