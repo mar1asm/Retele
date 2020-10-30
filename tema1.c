@@ -17,8 +17,6 @@
 #define BLUE "\x1B[34m"
 #define NORMAL "\x1B[0m"
 
-pid_t pid;
-
 // base functions
 int login ( char *username, char *password );
 int myStat ( char *filename, char *path, char *fileInfo );
@@ -33,16 +31,11 @@ void getDate ( time_t time, char *date );
 void getFileType ( int type, char *fileType );
 void printFilesInfo ( char *command, char *answer );
 
-void killChild ( int sig ) {
-  printf ( RED "timeout-not responding" NORMAL );
-  kill ( pid, sig );
-}
-
 int main ( ) {
 
-  int fd, isRunning = 1, loggedIn = 1;
+  int fd, isRunning = 1, loggedIn = 0;
   char *command;
-  pid_t ppid = getpid ( );
+  pid_t pid, ppid = getpid ( );
   int length;
   while ( isRunning ) {
     size_t l = 0;
@@ -71,7 +64,6 @@ int main ( ) {
       printf ( RED "Eroare la FIFO\n" NORMAL );
       exit ( 0 );
     }
-    signal ( SIGALRM, ( void ( * ) ( int ) ) killChild );
     pid = fork ( );
 
     if ( pid == 0 ) {
@@ -80,13 +72,14 @@ int main ( ) {
       char command[ 100 ];
       close ( pipe1[ 1 ] );
 
-      read ( pipe1[ 0 ], &length, 4 );
+      read ( pipe1[ 0 ], &length, 4 );    //citesc comanda din pipe
       read ( pipe1[ 0 ], command, length );
       command[ length ] = 0;
 
       char *p;
       p = strtok ( command, " " );
-      if ( ! strcmp ( p, "info" ) ) {
+
+      if ( ! strcmp ( p, "info" ) ) { //info
         char comm[ 20 ], answer[ 500 ];
         strcpy ( comm, "all" );
         p = strtok ( NULL, " " );
@@ -98,8 +91,7 @@ int main ( ) {
         length = strlen ( answer );
         write ( sockp[ 1 ], &length, 4 );
         write ( sockp[ 1 ], answer, length );
-      }
-      if ( ! strcmp ( p, "quit" ) ) { // quit
+      } else if ( ! strcmp ( p, "quit" ) ) { // quit
         quit ( ppid );
       } else if ( ! strcmp ( p, "login:" ) ) { // login
         char answer[ 500 ], username[ 20 ], password[ 10 ];
@@ -195,22 +187,19 @@ int main ( ) {
       exit ( 0 );
     }
 
-    close ( pipe1[ 0 ] );
-    write ( pipe1[ 1 ], &length, 4 );
+    close ( pipe1[ 0 ] );   
+    write ( pipe1[ 1 ], &length, 4 ); //scriu comanda in pipe
     write ( pipe1[ 1 ], command, length );
     close ( pipe1[ 1 ] );
 
     char *p = strtok ( command, " " );
-    alarm ( 10 );
-
-    if ( ! strcmp ( p, "login:" ) ) {
+    if ( ! strcmp ( p, "login:" ) ) {   //daca e login astept raspunsul in fifo
       char answer[ 100 ];
       int fd2;
       fd2 = open ( "./myFifo", O_RDONLY );
       read ( fd2, &length, 4 );
       read ( fd2, answer, length );
       answer[ length ] = 0;
-      alarm ( 0 );
 
       if ( ! strcmp ( answer, "login_success" ) ) {
         printf ( GREEN "%s\n", "You have successfully logged in" NORMAL );
@@ -220,11 +209,10 @@ int main ( ) {
         printf ( RED "%s\n", "Login failed" NORMAL );
       }
       close ( fd2 );
-    } else if ( ! strcmp ( p, "mystat" ) ) {
+    } else if ( ! strcmp ( p, "mystat" ) ) {  //daca e mystat primesc raspunsul in socket
       char answer[ 100 ];
       close ( sockp[ 1 ] );
       read ( sockp[ 0 ], &length, 4 );
-      alarm ( 0 );
       if ( length == 0 )
         printf ( RED "No file with this name found. Try searching for smth "
                      "else\n" NORMAL );
@@ -239,11 +227,10 @@ int main ( ) {
         }
       }
       close ( sockp[ 0 ] );
-    } else if ( ! strcmp ( p, "myfind" ) ) {
+    } else if ( ! strcmp ( p, "myfind" ) ) { //daca e myfind primesc raspunsul in socket
       char answer[ 2000 ];
       close ( sockp[ 1 ] );
       read ( sockp[ 0 ], &length, 4 );
-      alarm ( 0 );
       if ( length == 0 )
         printf ( RED "No file with this name found. Try searching for smth "
                      "else\n" NORMAL );
@@ -258,13 +245,12 @@ int main ( ) {
         }
       }
       close ( sockp[ 0 ] );
-    } else {
+    } else {    //daca e info sau o eroare  
       char answer[ 20 ];
       close ( sockp[ 1 ] );
       read ( sockp[ 0 ], &length, 4 );
       read ( sockp[ 0 ], answer, length );
       answer[ length ] = 0;
-      alarm ( 0 );
       if ( ! strcmp ( p, "info" ) )
         printf ( "%s\n", answer );
       else
@@ -275,7 +261,7 @@ int main ( ) {
 }
 
 void quit ( pid_t parrentPid ) {
-  printf ( "%d\n%d\n", parrentPid, getpid ( ) );
+  // printf ( "%d\n%d\n", parrentPid, getpid ( ) );
   kill ( -parrentPid, SIGTERM );
   // sleep ( 2 );
   // kill ( -parrentPid, SIGKILL );
