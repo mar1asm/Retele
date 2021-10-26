@@ -72,14 +72,14 @@ int main ( ) {
       char command[ 100 ];
       close ( pipe1[ 1 ] );
 
-      read ( pipe1[ 0 ], &length, 4 ); // citesc comanda din pipe
+      read ( pipe1[ 0 ], &length, 4 );    //citesc comanda din pipe
       read ( pipe1[ 0 ], command, length );
       command[ length ] = 0;
 
       char *p;
       p = strtok ( command, " " );
 
-      if ( ! strcmp ( p, "info" ) ) { // info
+      if ( ! strcmp ( p, "info" ) ) { //info
         char comm[ 20 ], answer[ 500 ];
         strcpy ( comm, "all" );
         p = strtok ( NULL, " " );
@@ -187,13 +187,13 @@ int main ( ) {
       exit ( 0 );
     }
 
-    close ( pipe1[ 0 ] );
-    write ( pipe1[ 1 ], &length, 4 ); // scriu comanda in pipe
+    close ( pipe1[ 0 ] );   
+    write ( pipe1[ 1 ], &length, 4 ); //scriu comanda in pipe
     write ( pipe1[ 1 ], command, length );
     close ( pipe1[ 1 ] );
 
     char *p = strtok ( command, " " );
-    if ( ! strcmp ( p, "login:" ) ) { // daca e login astept raspunsul in fifo
+    if ( ! strcmp ( p, "login:" ) ) {   //daca e login astept raspunsul in fifo
       char answer[ 100 ];
       int fd2;
       fd2 = open ( "./myFifo", O_RDONLY );
@@ -209,9 +209,7 @@ int main ( ) {
         printf ( RED "%s\n", "Login failed" NORMAL );
       }
       close ( fd2 );
-    } else if ( ! strcmp (
-                    p,
-                    "mystat" ) ) { // daca e mystat primesc raspunsul in socket
+    } else if ( ! strcmp ( p, "mystat" ) ) {  //daca e mystat primesc raspunsul in socket
       char answer[ 100 ];
       close ( sockp[ 1 ] );
       read ( sockp[ 0 ], &length, 4 );
@@ -229,9 +227,7 @@ int main ( ) {
         }
       }
       close ( sockp[ 0 ] );
-    } else if ( ! strcmp (
-                    p,
-                    "myfind" ) ) { // daca e myfind primesc raspunsul in socket
+    } else if ( ! strcmp ( p, "myfind" ) ) { //daca e myfind primesc raspunsul in socket
       char answer[ 2000 ];
       close ( sockp[ 1 ] );
       read ( sockp[ 0 ], &length, 4 );
@@ -249,7 +245,7 @@ int main ( ) {
         }
       }
       close ( sockp[ 0 ] );
-    } else { // daca e info sau o eroare
+    } else {    //daca e info sau o eroare  
       char answer[ 20 ];
       close ( sockp[ 1 ] );
       read ( sockp[ 0 ], &length, 4 );
